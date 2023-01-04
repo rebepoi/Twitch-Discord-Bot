@@ -16,6 +16,16 @@ client.on('ready', () => {
     UpdateAuthConfig()
 });
 
+if(config.roleName){
+    client.on('guildMemberAdd', member => {
+        // Replace 'role-name' with the actual name of the role you want to add
+        const role = member.guild.roles.cache.find(role => role.name === config.roleName);
+    
+        // Add the role to the member
+        member.roles.add(role);
+    });
+}
+
 //function that will run the checks
 var Check = new CronJob(config.cron,async function () {
     const tempData = JSON.parse(fs.readFileSync('./config.json'))

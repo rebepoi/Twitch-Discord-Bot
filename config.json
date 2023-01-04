@@ -6,6 +6,7 @@
     "cron": "*/10 * * * *",
     "channelID": "CHANNELD_ID(REQUIRED)",
     "roleID": "ROLE_ID(NOT REQUIRED)",
+    "roleName": "ROLE_NAME(NOT REQUIRED)",
     "channels": [
         {
             "ChannelName": "STREAMER_NAME(REQUIRED)",
