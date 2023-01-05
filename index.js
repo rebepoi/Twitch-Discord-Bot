@@ -98,7 +98,7 @@ var Check = new CronJob(config.cron,async function () {
                 channelObj.twitch_stream_id = StreamData.id
                 
                 if(config.roleID){
-                    sendChannel.send(`<&${config.roleID}>`)
+                    sendChannel.send(`@everyone`)
                 }
             })
         }
