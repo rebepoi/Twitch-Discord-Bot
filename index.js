@@ -45,12 +45,22 @@ var Check = new CronJob(config.cron,async function () {
         const ChannelData = await Channel.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken)
         if (!ChannelData) return;
 
+        var message = `Hey @everyone, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login}! Go check it out!`;
+        var owner = false;
+        if (StreamData.user_login === 'rebepoi') {
+            owner = true;
+        }
         //structure for the embed
         var SendEmbed = {
-            "title": `🔴 ${StreamData.user_name} is now live`,
+            "title": StreamData.title,
             "description": StreamData.title,
             "url": `https://www.twitch.tv/${StreamData.user_login}`,
             "color": 6570404,
+            "author": {
+                "name": `${StreamData.user_name}`,
+                "icon_url": `${ChannelData.thumbnail_url}`,
+                "url": `https://www.twitch.tv/${StreamData.user_login}`,
+            },
             "fields": [
                 {
                     "name": "Playing:",
@@ -70,6 +80,9 @@ var Check = new CronJob(config.cron,async function () {
                     "value": "** **"
                 })
             ],
+            "footer": {
+                "text": owner ? "Lets fail!" : ""
+            },
             //"footer": {
             //    "text": StreamData.started_at
             //},
@@ -97,9 +110,9 @@ var Check = new CronJob(config.cron,async function () {
                 channelObj.discord_message_id = msg.id
                 channelObj.twitch_stream_id = StreamData.id
                 
-                if(config.roleID){
-                    sendChannel.send(`@everyone`)
-                }
+                /* if(config.roleID){
+                    sendChannel.send(`<@&${config.roleID}>`)
+                } */
             })
         }
         //save config with new data
