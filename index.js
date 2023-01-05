@@ -80,7 +80,7 @@ var Check = new CronJob(config.cron,async function () {
                 })
             ],
             "footer": {
-                "text": owner ? "Lets us fail again!" : ""
+                "text": owner ? "Let us fail again!" : ""
             },
             //"footer": {
             //    "text": StreamData.started_at
