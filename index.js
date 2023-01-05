@@ -103,7 +103,7 @@ var Check = new CronJob(config.cron,async function () {
             });
         } else {
             //this is the message when a streamer goes live. It will tag the assigned role
-            await sendChannel.send({ embeds: [message, SendEmbed] }).then(msg => {
+            await sendChannel.send({ content: message, embeds: [SendEmbed] }).then(msg => {
                 const channelObj = tempData.channels[i]
                 
                 channelObj.discord_message_id = msg.id
