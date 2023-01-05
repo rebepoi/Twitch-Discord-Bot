@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.User,
+    GatewayIntentBits.GuildMembers,
 ] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
