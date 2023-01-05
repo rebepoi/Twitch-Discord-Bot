@@ -53,7 +53,6 @@ var Check = new CronJob(config.cron,async function () {
         //structure for the embed
         var SendEmbed = {
             "title": StreamData.title,
-            "description": StreamData.title,
             "url": `https://www.twitch.tv/${StreamData.user_login}`,
             "color": 6570404,
             "author": {
@@ -104,7 +103,7 @@ var Check = new CronJob(config.cron,async function () {
             });
         } else {
             //this is the message when a streamer goes live. It will tag the assigned role
-            await sendChannel.send({ embeds: [SendEmbed] }).then(msg => {
+            await sendChannel.send({ embeds: [message, SendEmbed] }).then(msg => {
                 const channelObj = tempData.channels[i]
                 
                 channelObj.discord_message_id = msg.id
