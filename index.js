@@ -91,11 +91,11 @@ var Check = new CronJob(config.cron,async function () {
         if (chan.twitch_stream_id == StreamData.id) {
             sendChannel.messages.fetch(chan.discord_message_id).then(msg => {
                 //update the title, game, viewer_count and the thumbnail
-                msg.edit({ embed: [SendEmbed] })
+                msg.edit({ embeds: [SendEmbed] })
             });
         } else {
             //this is the message when a streamer goes live. It will tag the assigned role
-            await sendChannel.send({ embed: [SendEmbed] }).then(msg => {
+            await sendChannel.send({ embeds: [SendEmbed] }).then(msg => {
                 const channelObj = tempData.channels[i]
                 
                 channelObj.discord_message_id = msg.id
