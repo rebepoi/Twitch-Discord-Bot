@@ -45,7 +45,7 @@ var Check = new CronJob(config.cron,async function () {
         const ChannelData = await Channel.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken)
         if (!ChannelData) return;
 
-        var message = `Hey @everyone, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login}! Go check it out!`;
+        var message = `Hey @everyone, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login} Go check it out!`;
         var owner = false;
         if (StreamData.user_login === 'rebepoi') {
             owner = true;
