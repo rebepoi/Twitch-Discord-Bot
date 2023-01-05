@@ -47,7 +47,7 @@ var Check = new CronJob(config.cron,async function () {
 
         //structure for the embed
         var SendEmbed = {
-            "title": `${ChannelData.thumbnail_url} ${StreamData.user_name} is now live go check it out!`,
+            "title": `🔴 ${StreamData.user_name} is now live`,
             "description": StreamData.title,
             "url": `https://www.twitch.tv/${StreamData.user_login}`,
             "color": 6570404,
@@ -61,10 +61,6 @@ var Check = new CronJob(config.cron,async function () {
                     "name": "Viewers:",
                     "value": StreamData.viewer_count,
                     "inline": true
-                },
-                {
-                    "name": "Twitch:",
-                    "value": `[Watch stream](https://www.twitch.tv/${StreamData.user_login})`
                 },
                 (chan.DiscordServer ? {
                     "name": "Discord Server:",
@@ -102,7 +98,7 @@ var Check = new CronJob(config.cron,async function () {
                 channelObj.twitch_stream_id = StreamData.id
                 
                 if(config.roleID){
-                    sendChannel.send(`<${config.roleID}>`)
+                    sendChannel.send(`<&${config.roleID}>`)
                 }
             })
         }
