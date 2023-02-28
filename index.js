@@ -121,7 +121,8 @@ var Check = new CronJob(config.cron,async function () {
 
 //update the authorization key every hour
 var updateAuth = new CronJob('0 * * * *', async function () {
-    UpdateAuthConfig()
+    UpdateAuthConfig();
+    console.log(`Logged in as ${client.user.tag}!`);
 });
 
 //get a new authorization key and update the config
