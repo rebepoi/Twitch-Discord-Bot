@@ -12,6 +12,11 @@ async function getData(channelName, clientID,authkey) {
                 if (error) {
                     return console.error(error)
                 }
+                // Check if the response is JSON
+                if (body.trim().startsWith('<')) {
+                    console.error('Unexpected HTML response:', body);
+                    return reject(new Error('Unexpected HTML response'));
+                }
                 try{
                     resolve(JSON.parse(body))
                 }catch(e){
