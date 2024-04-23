@@ -5,19 +5,46 @@ const client = new Client({ intents: [
 ] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
+const { loadModel, createCompletion } = require('gpt4all');
 
 const Stream = require("./modules/getStreams.js")
 const Auth = require("./modules/auth.js")
 const Channel = require("./modules/channelData.js")
 const config = require('./config.json')
 
+//Load the GPT-4All model during the bot startup
+let aiModel;
+
+async function loadAIModel() {
+    aiModel = await loadModel('Meta-Llama-3-8B-Instruct.Q4_0.gguf', { verbose: true, device: 'cpu' });
+}
+
 //ready
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
+    await loadAIModel();  // Load the AI model
 
     //update the authorization key on startup
     UpdateAuthConfig()
 });
+
+client.on('messageCreate', async message => {
+    if (!message.content.startsWith('!ai') || message.author.bot) return;
+
+    const input = message.content.slice(4).trim(); // Remove the command part
+    if (input.length === 0) {
+        return message.reply("Please provide some input for AI.");
+    }
+
+    try {
+        const completion = await createCompletion(aiModel, input, { verbose: true });
+        message.reply(completion.message);
+    } catch (error) {
+        console.error('Error in AI completion:', error);
+        message.reply("Sorry, I encountered an error while processing your request.");
+    }
+});
+
 
 if(config.roleName){
     client.on('guildMemberAdd', member => {
@@ -142,6 +169,11 @@ async function UpdateAuthConfig(){
 //start the timers
 updateAuth.start()
 Check.start();
+
+//dispose the AI model on disconnect
+client.on('disconnect', () => {
+    if (aiModel) aiModel.dispose();
+});
 
 //login
 client.login(config.token);
