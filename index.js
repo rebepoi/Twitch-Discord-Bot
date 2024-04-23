@@ -23,7 +23,7 @@ if(config.roleName){
     client.on('guildMemberAdd', member => {
         // Replace 'role-name' with the actual name of the role you want to add
         const role = member.guild.roles.cache.find(role => role.name === config.roleName);
-    
+
         // Add the role to the member
         member.roles.add(role);
     });
@@ -35,7 +35,7 @@ var Check = new CronJob(config.cron,async function () {
 
     tempData.channels.map(async function (chan, i) {
         if (!chan.ChannelName) return;
-        
+
         let StreamData = await Stream.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken);
         if (StreamData.data.length == 0) return
 
@@ -105,10 +105,10 @@ var Check = new CronJob(config.cron,async function () {
             //this is the message when a streamer goes live. It will tag the assigned role
             await sendChannel.send({ content: message, embeds: [SendEmbed] }).then(msg => {
                 const channelObj = tempData.channels[i]
-                
+
                 channelObj.discord_message_id = msg.id
                 channelObj.twitch_stream_id = StreamData.id
-                
+
                 /* if(config.roleID){
                     sendChannel.send(`<@&${config.roleID}>`)
                 } */
