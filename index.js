@@ -3,6 +3,7 @@ const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.MessageContentRead,
 ] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
