@@ -30,9 +30,13 @@ client.on('ready', async () => {
 });
 
 client.on('messageCreate', async message => {
+    console.log(`Received message: ${message.content}`); // Log the received message
+
     if (!message.content.startsWith('!ai') || message.author.bot) return;
 
     const input = message.content.slice(4).trim(); // Remove the command part
+    console.log(`AI input: ${input}`); // Log the parsed input
+
     if (input.length === 0) {
         return message.reply("Please provide some input for AI.");
     }
@@ -45,7 +49,6 @@ client.on('messageCreate', async message => {
         message.reply("Sorry, I encountered an error while processing your request.");
     }
 });
-
 
 if(config.roleName){
     client.on('guildMemberAdd', member => {
