@@ -15,24 +15,24 @@ const Auth = require("./modules/auth.js")
 const Channel = require("./modules/channelData.js")
 const config = require('./config.json')
 
-//Load the GPT-4All model during the bot startup
+// Load the GPT-4All model during the bot startup
 let aiModel;
 
 async function loadAIModel() {
     aiModel = await loadModel('Meta-Llama-3-8B-Instruct.Q4_0.gguf', { verbose: true, device: 'cpu' });
 }
 
-//ready
+// Ready
 client.on('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    //console.log(`Logged in as ${client.user.tag}!`);
     await loadAIModel();  // Load the AI model
 
-    //update the authorization key on startup
+    // Update the authorization key on startup
     UpdateAuthConfig()
 });
 
 client.on('messageCreate', async message => {
-    console.log(`Received message: ${message.content}`); // Log the received message
+    //console.log(`Received message: ${message.content}`); // Log the received message
 
     // Check if the message starts with '!ai' and is not from a bot
     if (!message.content.startsWith('!ai') || message.author.bot) {
@@ -40,43 +40,42 @@ client.on('messageCreate', async message => {
     }
 
     const input = message.content.slice(4).trim(); // Remove the command part
-    console.log(`AI input: ${input}`); // Log the parsed input
+    //console.log(`AI input: ${input}`); // Log the parsed input
 
     if (input.length === 0) {
         return message.reply("Please provide some input for AI.");
     }
 
+    // Send an immediate feedback message
+    const feedbackMessage = await message.reply("Processing your request, please wait...");
+
     try {
         const completion = await createCompletion(aiModel, input, { verbose: true });
-        console.log("Finished completion:", JSON.stringify(completion, null, 2)); // Log the complete object for verification
-
-        // Accessing the response text from the nested structure
         const responseText = completion.choices[0].message.content;
-
+        
         if (responseText && responseText.trim().length > 0) {
-            message.reply(responseText).catch(console.error)
+            // Edit the feedback message with the AI response
+            feedbackMessage.edit(responseText).catch(console.error);
         } else {
-            message.reply("The AI did not return a valid response. Did you delete original message?").catch(console.error);
+            // If no valid response, inform the user
+            feedbackMessage.edit("The AI did not return a valid response. Please try again.").catch(console.error);
         }
     } catch (error) {
         console.error('Error in AI completion:', error);
-        message.reply("Sorry, I encountered an error while processing your request.");
+        feedbackMessage.edit("Sorry, I encountered an error while processing your request.").catch(console.error);
     }
 });
 
-if(config.roleName){
+if (config.roleName) {
     client.on('guildMemberAdd', member => {
-        // Replace 'role-name' with the actual name of the role you want to add
         const role = member.guild.roles.cache.find(role => role.name === config.roleName);
-
-        // Add the role to the member
         member.roles.add(role);
     });
 }
 
-//function that will run the checks
-var Check = new CronJob(config.cron,async function () {
-    const tempData = JSON.parse(fs.readFileSync('./config.json'))
+// Function that will run the checks
+var Check = new CronJob(config.cron, async function () {
+    const tempData = JSON.parse(fs.readFileSync('./config.json'));
 
     tempData.channels.map(async function (chan, i) {
         if (!chan.ChannelName) return;
@@ -84,10 +83,8 @@ var Check = new CronJob(config.cron,async function () {
         let StreamData = await Stream.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken);
         if (StreamData.data.length == 0) return
 
-        StreamData = StreamData.data[0]
-
-        //get the channel data for the thumbnail image
-        const ChannelData = await Channel.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken)
+        StreamData = StreamData.data[0];
+        const ChannelData = await Channel.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken);
         if (!ChannelData) return;
 
         var message = `Hey @everyone, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login} Go check it out!`;
@@ -95,7 +92,7 @@ var Check = new CronJob(config.cron,async function () {
         if (StreamData.user_login === 'rebepoi') {
             owner = true;
         }
-        //structure for the embed
+
         var SendEmbed = {
             "title": StreamData.title,
             "url": `https://www.twitch.tv/${StreamData.user_login}`,
@@ -127,71 +124,57 @@ var Check = new CronJob(config.cron,async function () {
             "footer": {
                 "text": owner ? "Let us fail again!" : ""
             },
-            //"footer": {
-            //    "text": StreamData.started_at
-            //},
             "image": {
                 "url": `https://static-cdn.jtvnw.net/previews-ttv/live_user_${StreamData.user_login}-640x360.jpg?cacheBypass=${(Math.random()).toString()}`
             },
             "thumbnail": {
                 "url": `${ChannelData.thumbnail_url}`
             }
-        }
+        };
 
-        //get the assigned channel
-        const sendChannel = client.guilds.cache.get(config.DiscordServerId).channels.cache.get(config.channelID)
+        const sendChannel = client.guilds.cache.get(config.DiscordServerId).channels.cache.get(config.channelID);
 
         if (chan.twitch_stream_id == StreamData.id) {
             sendChannel.messages.fetch(chan.discord_message_id).then(msg => {
-                //update the title, game, viewer_count and the thumbnail
-                msg.edit({ embeds: [SendEmbed] })
+                msg.edit({ embeds: [SendEmbed] });
             });
         } else {
-            //this is the message when a streamer goes live. It will tag the assigned role
             await sendChannel.send({ content: message, embeds: [SendEmbed] }).then(msg => {
-                const channelObj = tempData.channels[i]
-
-                channelObj.discord_message_id = msg.id
-                channelObj.twitch_stream_id = StreamData.id
-
-                /* if(config.roleID){
-                    sendChannel.send(`<@&${config.roleID}>`)
-                } */
-            })
+                const channelObj = tempData.channels[i];
+                channelObj.discord_message_id = msg.id;
+                channelObj.twitch_stream_id = StreamData.id;
+            });
         }
-        //save config with new data
-        fs.writeFileSync('./config.json', JSON.stringify(tempData))
-    })
+        fs.writeFileSync('./config.json', JSON.stringify(tempData));
+    });
 });
 
-//update the authorization key every hour
+// Update the authorization key every hour
 var updateAuth = new CronJob('0 * * * *', async function () {
     UpdateAuthConfig();
-    console.log(`Logged in as ${client.user.tag}!`);
+    //console.log(`Logged in as ${client.user.tag}!`);
 });
 
-//get a new authorization key and update the config
+// Get a new authorization key and update the config
 async function UpdateAuthConfig(){
     let tempData = JSON.parse(fs.readFileSync('./config.json'));
 
-    //get the auth key
     const authKey = await Auth.getKey(tempData.twitch_clientID, tempData.twitch_secret);
     if (!authKey) return;
 
-    //write the new auth key
     var tempConfig = JSON.parse(fs.readFileSync('./config.json'));
     tempConfig.authToken = authKey;
     fs.writeFileSync('./config.json', JSON.stringify(tempConfig));
 }
 
-//start the timers
-updateAuth.start()
+// Start the timers
+updateAuth.start();
 Check.start();
 
-//dispose the AI model on disconnect
+// Dispose the AI model on disconnect
 client.on('disconnect', () => {
     if (aiModel) aiModel.dispose();
 });
 
-//login
+// Login
 client.login(config.token);
