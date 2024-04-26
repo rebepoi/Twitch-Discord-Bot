@@ -48,9 +48,13 @@ client.on('messageCreate', async message => {
 
     try {
         const completion = await createCompletion(aiModel, input, { verbose: true });
-        console.log(`AI completion: ${completion.text}`); // Log the AI completion
-        if (completion.text && completion.text.trim().length > 0) { // Check if 'text' is not empty
-            message.reply(completion.text).catch(console.error);
+        console.log("Finished completion:", JSON.stringify(completion, null, 2)); // Log the complete object for verification
+
+        // Accessing the response text from the nested structure
+        const responseText = completion.choices[0].message.content;
+
+        if (responseText && responseText.trim().length > 0) {
+            message.reply(responseText).catch(console.error)
         } else {
             message.reply("The AI did not return a valid response. Did you delete original message?").catch(console.error);
         }
