@@ -48,7 +48,9 @@ client.on('messageCreate', async message => {
 
     try {
         const completion = await createCompletion(aiModel, input, { verbose: true });
-        if (completion.text && completion.text.trim().length > 0) { // Check if 'text' is not empty
+        
+        // Ensure text exists and is not empty
+        if (completion.text?.trim()) {
             message.reply(completion.text).catch(console.error);
         } else {
             message.reply("The AI did not return a valid response. Did you delete original message?").catch(console.error);
