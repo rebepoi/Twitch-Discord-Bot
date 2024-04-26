@@ -34,7 +34,12 @@ client.on('ready', async () => {
 client.on('messageCreate', async message => {
     console.log(`Received message: ${message.content}`); // Log the received message
 
-    const input = message.content.slice(3).trim(); // Remove the command part
+    // Check if the message starts with '!ai' and is not from a bot
+    if (!message.content.startsWith('!ai') || message.author.bot) {
+        return; // Ignore the message if it does not start with '!ai' or is from a bot
+    }
+
+    const input = message.content.slice(4).trim(); // Remove the command part
     console.log(`AI input: ${input}`); // Log the parsed input
 
     if (input.length === 0) {
