@@ -4,6 +4,7 @@ const client = new Client({ intents: [
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent
 ] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
@@ -33,9 +34,7 @@ client.on('ready', async () => {
 client.on('messageCreate', async message => {
     console.log(`Received message: ${message.content}`); // Log the received message
 
-    if (!message.content.startsWith('!ai') || message.author.bot) return;
-
-    const input = message.content.slice(4).trim(); // Remove the command part
+    const input = message.content.slice(3).trim(); // Remove the command part
     console.log(`AI input: ${input}`); // Log the parsed input
 
     if (input.length === 0) {
@@ -44,7 +43,11 @@ client.on('messageCreate', async message => {
 
     try {
         const completion = await createCompletion(aiModel, input, { verbose: true });
-        message.reply(completion.message);
+        if (completion.message) {
+            message.reply(completion.message).catch(console.error);
+        } else {
+            message.reply("The AI did not return a valid response. Did you delete original message?").catch(console.error);
+        }
     } catch (error) {
         console.error('Error in AI completion:', error);
         message.reply("Sorry, I encountered an error while processing your request.");
