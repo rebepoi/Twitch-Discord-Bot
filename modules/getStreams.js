@@ -1,29 +1,50 @@
-const request = require('request')
+const request = require('request');
 
-async function getData(channelName, clientID,authkey) {
+async function getData(channelName, clientID, authkey) {
     return new Promise((resolve, reject) => {
-        var headers = {
+        const headers = {
             'Client-Id': clientID,
             'Authorization': `Bearer ${authkey}`
         };
-        request.get(
-            `https://api.twitch.tv/helix/streams?user_login=${channelName}`,{headers:headers},
-            (error, res, body) => {
+
+        const options = {
+            url: `https://api.twitch.tv/helix/streams?user_login=${channelName}`,
+            headers: headers,
+            timeout: 10000 // 10 seconds timeout
+        };
+
+        const makeRequest = (attemptsLeft) => {
+            request.get(options, (error, res, body) => {
                 if (error) {
-                    return console.error(error)
+                    console.error('Request error:', error);
+                    if (attemptsLeft <= 1) {
+                        return reject(error);
+                    }
+                    // Retry after a delay
+                    setTimeout(() => makeRequest(attemptsLeft - 1), 2000);
+                    return;
                 }
+
                 // Check if the response is JSON
                 if (body.trim().startsWith('<')) {
-                    console.error('Unexpected HTML response:', body);
-                    return reject(new Error('Unexpected HTML response'));
+                    console.error('Unexpected HTML response:', { statusCode: res.statusCode, headers: res.headers, body });
+                    if (attemptsLeft <= 1) {
+                        return reject(new Error('Unexpected HTML response'));
+                    }
+                    // Retry after a delay
+                    setTimeout(() => makeRequest(attemptsLeft - 1), 2000);
+                    return;
                 }
-                try{
-                    resolve(JSON.parse(body))
-                }catch(e){
-                    reject(e)
+
+                try {
+                    resolve(JSON.parse(body));
+                } catch (e) {
+                    reject(e);
                 }
-            }
-        )
+            });
+        };
+
+        makeRequest(3); // Try up to 3 times
     });
 }
 
