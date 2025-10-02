@@ -1,12 +1,13 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent
-] });
+], partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
 const { fetch } = require('undici');
@@ -61,6 +62,39 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o';
 const OPENROUTER_VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || 'moonshotai/kimi-vl-a3b-thinking:free';
 
+// Runtime selection sessions for reaction-based model picking
+const selectionSessions = new Map(); // messageId -> { type: 'regular'|'vision', models: string[], authorId: string }
+
+const NUMBER_EMOJIS = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+async function addNumberReactions(msg, count){
+    for(let i=0;i<Math.min(count, NUMBER_EMOJIS.length);i++){
+        await msg.react(NUMBER_EMOJIS[i]).catch(()=>{});
+    }
+}
+
+async function fetchOpenRouterModels(){
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${OPENROUTER_API_KEY}` }
+    });
+    if(!res.ok){
+        return { text: [], vision: [] };
+    }
+    const json = await res.json();
+    const data = Array.isArray(json.data) ? json.data : [];
+    // free models only
+    const free = data.filter(m => {
+        const p = m.pricing || {};
+        const inp = Number(p.prompt ?? p.input ?? '1');
+        const out = Number(p.completion ?? p.output ?? '1');
+        return inp === 0 && out === 0;
+    });
+    const vision = free.filter(m => /vl|vision|gemini/i.test(m.id) || /vision|image/i.test(JSON.stringify(m.capabilities||{})));
+    const text = free.filter(m => !vision.includes(m));
+    // limit to top 8
+    return { text: text.slice(0,8).map(m=>m.id), vision: vision.slice(0,8).map(m=>m.id) };
+}
+
 // Ready
 client.on('ready', async () => {
     //console.log(`Logged in as ${client.user.tag}!`);
@@ -70,6 +104,28 @@ client.on('ready', async () => {
 });
 
 client.on('messageCreate', async message => {
+    // Interactive model selection: !models
+    if (message.content.trim().startsWith('!models')) {
+        if (!OPENROUTER_API_KEY) {
+            return message.reply('OpenRouter API key is not set.');
+        }
+        const models = await fetchOpenRouterModels();
+        const current = readConfig();
+        const regularCurrent = process.env.OPENROUTER_MODEL || current.OPENROUTER_MODEL || OPENROUTER_MODEL;
+        const visionCurrent = process.env.OPENROUTER_VISION_MODEL || current.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
+        const lines = [];
+        lines.push(`Current regular model: ${regularCurrent}`);
+        lines.push(`Current vision model: ${visionCurrent}`);
+        lines.push('\nSelect regular model (react 1-9):');
+        models.text.forEach((id, idx) => lines.push(`${NUMBER_EMOJIS[idx]} ${id}`));
+        lines.push('\nSelect vision model (react 1-9) after I post the next message:');
+        models.vision.forEach((id, idx) => lines.push(`${NUMBER_EMOJIS[idx]} ${id}`));
+        const helpMsg = await message.reply(lines.join('\n'));
+        selectionSessions.set(helpMsg.id, { type: 'regular', models: models.text, authorId: message.author.id });
+        await addNumberReactions(helpMsg, models.text.length);
+        return;
+    }
+
     if (!message.content.startsWith('!ai') || message.author.bot) {
         return;
     }
@@ -102,10 +158,14 @@ client.on('messageCreate', async message => {
         for (const att of imageAttachments) {
             userContentParts.push({ type: 'image_url', image_url: { url: att.url } });
         }
+        // Resolve models dynamically: env overrides > config.local.json > defaults
+        const cfg = readConfig();
+        const regularModelEffective = process.env.OPENROUTER_MODEL || cfg.OPENROUTER_MODEL || OPENROUTER_MODEL;
+        const visionModelEffective = process.env.OPENROUTER_VISION_MODEL || cfg.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
         // Choose model: if images present and a distinct vision model is configured, use it; otherwise use regular model
-        const modelToUse = (hasImages && OPENROUTER_VISION_MODEL && OPENROUTER_VISION_MODEL !== OPENROUTER_MODEL)
-            ? OPENROUTER_VISION_MODEL
-            : OPENROUTER_MODEL;
+        const modelToUse = (hasImages && visionModelEffective && visionModelEffective !== regularModelEffective)
+            ? visionModelEffective
+            : regularModelEffective;
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -330,3 +390,41 @@ client.on('disconnect', () => {});
 
 // Login
 client.login(DISCORD_TOKEN);
+
+// Handle reaction selections for !models
+client.on('messageReactionAdd', async (reaction, user) => {
+    try {
+        if (user.bot) return;
+        if (reaction.partial) await reaction.fetch().catch(()=>{});
+        const session = selectionSessions.get(reaction.message.id);
+        if (!session) return;
+        if (user.id !== session.authorId) return;
+        const emoji = reaction.emoji.name;
+        const idx = NUMBER_EMOJIS.indexOf(emoji);
+        if (idx === -1) return;
+        const chosen = session.models[idx];
+        if (!chosen) return;
+
+        const cfg = readConfig();
+        if (session.type === 'regular') {
+            cfg.OPENROUTER_MODEL = chosen;
+            writeConfig(cfg);
+            await reaction.message.reply(`Regular model set to: ${chosen}`);
+            // Post a new message for vision selection
+            const models = await fetchOpenRouterModels();
+            const lines = [];
+            lines.push('Select vision model (react 1-9):');
+            models.vision.forEach((id, i) => lines.push(`${NUMBER_EMOJIS[i]} ${id}`));
+            const vMsg = await reaction.message.channel.send(lines.join('\n'));
+            selectionSessions.set(vMsg.id, { type: 'vision', models: models.vision, authorId: user.id });
+            await addNumberReactions(vMsg, models.vision.length);
+        } else if (session.type === 'vision') {
+            cfg.OPENROUTER_VISION_MODEL = chosen;
+            writeConfig(cfg);
+            await reaction.message.reply(`Vision model set to: ${chosen}`);
+        }
+        selectionSessions.delete(reaction.message.id);
+    } catch (e) {
+        console.error('Error handling reaction selection:', e);
+    }
+});
