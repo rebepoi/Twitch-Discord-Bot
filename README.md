@@ -41,6 +41,7 @@ MAX_EDITS_PER_STREAM=2
 ENABLE_AI=false
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=openai/gpt-4o
+OPENROUTER_VISION_MODEL=moonshotai/kimi-vl-a3b-thinking:free
 ```
 
 NOTE: Secrets are only in `.env`. The file `config.local.json` contains non-secret structure and runtime state.
@@ -110,9 +111,9 @@ OPENROUTER_MODEL=openai/gpt-4o
 Use in Discord: send `!ai <your message>`.
 
 ### Images with !ai (vision-capable models)
-- Some models (e.g., `x-ai/grok-4-fast:free`) accept images.
 - Attach 1–3 images to your message and use `!ai <prompt>`.
-- The bot will include attachment URLs in the AI request automatically.
+- The bot automatically switches to `OPENROUTER_VISION_MODEL` when images are attached (default: `moonshotai/kimi-vl-a3b-thinking:free`).
+- Without images, it uses `OPENROUTER_MODEL`.
 Congratulations! You have successfully setup the bot.
 If there are any errors please send me a dm on Discord
 rebepoi

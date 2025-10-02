@@ -59,6 +59,7 @@ const MAX_EDITS_PER_STREAM = Number(process.env.MAX_EDITS_PER_STREAM || 2);
 // OpenRouter config
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o';
+const OPENROUTER_VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || 'moonshotai/kimi-vl-a3b-thinking:free';
 
 // Ready
 client.on('ready', async () => {
@@ -101,6 +102,7 @@ client.on('messageCreate', async message => {
         for (const att of imageAttachments) {
             userContentParts.push({ type: 'image_url', image_url: { url: att.url } });
         }
+        const modelToUse = hasImages ? OPENROUTER_VISION_MODEL : OPENROUTER_MODEL;
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -108,7 +110,7 @@ client.on('messageCreate', async message => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: OPENROUTER_MODEL,
+                model: modelToUse,
                 messages: [
                     { role: 'system', content: 'You are a helpful assistant inside a Discord bot.' },
                     hasImages ? { role: 'user', content: userContentParts } : { role: 'user', content: input }

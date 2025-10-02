@@ -7,4 +7,5 @@ services:
       - .env
     volumes:
       - ./config.local.json:/usr/src/app/config.local.json
+    network_mode: "host"
     restart: unless-stopped
