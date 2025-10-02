@@ -100,6 +100,13 @@ client.on('messageCreate', async message => {
         });
         if (!res.ok) {
             const text = await res.text();
+            const regionBlocked = res.status === 403 && /not available in your region/i.test(text);
+            if (regionBlocked) {
+                const err = new Error('AI provider not available in your region');
+                err.code = 'REGION_BLOCK';
+                err.details = text;
+                throw err;
+            }
             throw new Error(`OpenRouter error ${res.status}: ${text}`);
         }
         const json = await res.json();
@@ -111,7 +118,12 @@ client.on('messageCreate', async message => {
         }
     } catch (error) {
         console.error('Error in AI completion:', error);
-        feedbackMessage.edit("Sorry, I encountered an error while processing your request.").catch(console.error);
+        if (error.code === 'REGION_BLOCK') {
+            const tip = `AI provider is not available in this region. Please set OPENROUTER_MODEL to a different model (e.g., openai/gpt-4o) and restart.`;
+            feedbackMessage.edit(tip).catch(console.error);
+        } else {
+            feedbackMessage.edit("Sorry, I encountered an error while processing your request.").catch(console.error);
+        }
     }
 });
 
