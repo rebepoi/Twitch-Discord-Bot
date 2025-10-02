@@ -84,6 +84,23 @@ client.on('messageCreate', async message => {
         if (!OPENROUTER_API_KEY) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
+        // Collect image attachments from the Discord message
+        const imageAttachments = Array.from(message.attachments?.values?.() || [])
+            .filter(att => {
+                const ct = att.contentType || '';
+                const name = att.name || att.url || '';
+                return (ct.startsWith('image/')) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+            })
+            .slice(0, 3);
+
+        const hasImages = imageAttachments.length > 0;
+        const userContentParts = [];
+        if (input) {
+            userContentParts.push({ type: 'text', text: input });
+        }
+        for (const att of imageAttachments) {
+            userContentParts.push({ type: 'image_url', image_url: { url: att.url } });
+        }
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -94,7 +111,7 @@ client.on('messageCreate', async message => {
                 model: OPENROUTER_MODEL,
                 messages: [
                     { role: 'system', content: 'You are a helpful assistant inside a Discord bot.' },
-                    { role: 'user', content: input }
+                    hasImages ? { role: 'user', content: userContentParts } : { role: 'user', content: input }
                 ]
             })
         });
