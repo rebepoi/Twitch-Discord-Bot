@@ -121,6 +121,24 @@ client.on('messageCreate', async message => {
             })
         });
         if (!res.ok) {
+            // Handle rate-limit with reset time if provided
+            if (res.status === 429) {
+                const limit = res.headers.get('x-ratelimit-limit');
+                const remaining = res.headers.get('x-ratelimit-remaining');
+                const resetRaw = res.headers.get('x-ratelimit-reset');
+                let resetMs = Number(resetRaw);
+                if (!Number.isNaN(resetMs)) {
+                    if (resetMs < 1e12) resetMs = resetMs * 1000; // seconds -> ms
+                } else {
+                    resetMs = 0;
+                }
+                const err = new Error('Rate limit exceeded');
+                err.code = 'RATE_LIMIT';
+                err.limit = limit;
+                err.remaining = remaining;
+                err.resetMs = resetMs;
+                throw err;
+            }
             const text = await res.text();
             const regionBlocked = res.status === 403 && /not available in your region/i.test(text);
             if (regionBlocked) {
@@ -160,6 +178,16 @@ client.on('messageCreate', async message => {
         if (error.code === 'REGION_BLOCK') {
             const tip = `AI provider is not available in this region. Please set OPENROUTER_MODEL to a different model (e.g., openai/gpt-4o) and restart.`;
             feedbackMessage.edit(tip).catch(console.error);
+        } else if (error.code === 'RATE_LIMIT') {
+            const now = Date.now();
+            const resetMs = Number(error.resetMs || 0);
+            const etaMin = resetMs > now ? Math.ceil((resetMs - now) / 60000) : null;
+            const resetAtLocal = resetMs ? new Date(resetMs).toLocaleString() : 'unknown time';
+            const cap = (error.remaining !== undefined && error.limit !== undefined)
+                ? `(${error.remaining}/${error.limit} remaining)`
+                : '';
+            const msg = `OpenRouter rate limit reached ${cap}. Resets ${etaMin !== null ? `in ~${etaMin} min` : 'soon'} (at ${resetAtLocal}).`;
+            feedbackMessage.edit(msg).catch(console.error);
         } else {
             feedbackMessage.edit("Sorry, I encountered an error while processing your request.").catch(console.error);
         }
