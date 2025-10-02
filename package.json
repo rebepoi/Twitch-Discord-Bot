@@ -4,11 +4,12 @@
   "description": "Notify your community whenever you go live!",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Siddhartt/Twitch-Discord-Notifyer.git"
+    "url": "git+https://github.com/rebepoi/Twitch-Discord-Bot.git"
   },
   "keywords": [
     "twitch",
@@ -19,17 +20,19 @@
     "stream",
     "live"
   ],
-  "author": "Siddhart G.",
+  "author": "rebepoi",
+  "contributors": [
+    "Siddhart G. (original author)"
+  ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Siddhartt/Twitch-Discord-Notifyer/issues"
+    "url": "https://github.com/rebepoi/Twitch-Discord-Bot/issues"
   },
-  "homepage": "https://github.com/Siddhartt/Twitch-Discord-Notifyer#readme",
+  "homepage": "https://github.com/rebepoi/Twitch-Discord-Bot#readme",
   "dependencies": {
     "cron": "^2.3.1",
     "discord.js": "^14.11.0",
     "dotenv": "^16.0.3",
-    "gpt4all": "^4.0.0",
-    "request": "^2.88.2"
+    "undici": "^6.19.8"
   }
 }

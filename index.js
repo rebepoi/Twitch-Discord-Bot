@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
@@ -8,56 +9,104 @@ const client = new Client({ intents: [
 ] });
 var CronJob = require('cron').CronJob;
 const fs = require('fs')
-const { loadModel, createCompletion } = require('gpt4all');
+const { fetch } = require('undici');
 
 const Stream = require("./modules/getStreams.js")
 const Auth = require("./modules/auth.js")
 const Channel = require("./modules/channelData.js")
-const config = require('./config.json')
 
-// Load the GPT-4All model during the bot startup
-let aiModel;
+// Ensure local config exists; prefer template, do not import legacy config.json (secrets)
+const TEMPLATE_PATH = './config.template.json';
+const LOCAL_CONFIG_PATH = './config.local.json';
+const LEGACY_CONFIG_PATH = './config.json';
 
-async function loadAIModel() {
-    aiModel = await loadModel('Meta-Llama-3-8B-Instruct.Q4_0.gguf', { verbose: true, device: 'cpu' });
+function ensureLocalConfig() {
+    if (!fs.existsSync(LOCAL_CONFIG_PATH)) {
+        if (fs.existsSync(TEMPLATE_PATH)) {
+            fs.copyFileSync(TEMPLATE_PATH, LOCAL_CONFIG_PATH);
+        } else {
+            fs.writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify({
+                DiscordServerId: "",
+                cron: "*/10 * * * *",
+                channelID: "",
+                roleID: "",
+                roleName: "",
+                channels: [ { ChannelName: "", DiscordServer: "", twitch_stream_id: "", discord_message_id: "" } ]
+            }));
+        }
+    }
 }
+
+function readConfig() {
+    return JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH));
+}
+
+function writeConfig(obj) {
+    fs.writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(obj));
+}
+
+ensureLocalConfig();
+const initialConfig = readConfig();
+const CRON_EXPR = process.env.CRON || initialConfig.cron || '*/10 * * * *';
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || initialConfig.DiscordServerId;
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID || initialConfig.channelID;
+const ROLE_NAME = process.env.ROLE_NAME || initialConfig.roleName;
+const ROLE_ID = process.env.ROLE_ID || initialConfig.roleID;
+const ENABLE_AI = (process.env.ENABLE_AI || 'false').toLowerCase() === 'true';
+const MAX_EDITS_PER_STREAM = Number(process.env.MAX_EDITS_PER_STREAM || 2);
+
+// OpenRouter config
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o';
 
 // Ready
 client.on('ready', async () => {
     //console.log(`Logged in as ${client.user.tag}!`);
-    await loadAIModel();  // Load the AI model
 
     // Update the authorization key on startup
     UpdateAuthConfig()
 });
 
 client.on('messageCreate', async message => {
-    //console.log(`Received message: ${message.content}`); // Log the received message
-
-    // Check if the message starts with '!ai' and is not from a bot
     if (!message.content.startsWith('!ai') || message.author.bot) {
-        return; // Ignore the message if it does not start with '!ai' or is from a bot
+        return;
     }
-
-    const input = message.content.slice(4).trim(); // Remove the command part
-    //console.log(`AI input: ${input}`); // Log the parsed input
-
+    if (!ENABLE_AI) {
+        return message.reply("AI is disabled on this bot.");
+    }
+    const input = message.content.slice(4).trim();
     if (input.length === 0) {
         return message.reply("Please provide some input for AI.");
     }
-
-    // Send an immediate feedback message
     const feedbackMessage = await message.reply("Processing your request, please wait...");
-
     try {
-        const completion = await createCompletion(aiModel, input, { verbose: true });
-        const responseText = completion.choices[0].message.content;
-        
+        if (!OPENROUTER_API_KEY) {
+            throw new Error('OPENROUTER_API_KEY is not set');
+        }
+        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: OPENROUTER_MODEL,
+                messages: [
+                    { role: 'system', content: 'You are a helpful assistant inside a Discord bot.' },
+                    { role: 'user', content: input }
+                ]
+            })
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`OpenRouter error ${res.status}: ${text}`);
+        }
+        const json = await res.json();
+        const responseText = json.choices?.[0]?.message?.content || '';
         if (responseText && responseText.trim().length > 0) {
-            // Edit the feedback message with the AI response
             feedbackMessage.edit(responseText).catch(console.error);
         } else {
-            // If no valid response, inform the user
             feedbackMessage.edit("The AI did not return a valid response. Please try again.").catch(console.error);
         }
     } catch (error) {
@@ -66,29 +115,32 @@ client.on('messageCreate', async message => {
     }
 });
 
-if (config.roleName) {
+if (ROLE_NAME) {
     client.on('guildMemberAdd', member => {
-        const role = member.guild.roles.cache.find(role => role.name === config.roleName);
+        const role = member.guild.roles.cache.find(role => role.name === ROLE_NAME);
         member.roles.add(role);
     });
 }
 
 // Function that will run the checks
-var Check = new CronJob(config.cron, async function () {
-    const tempData = JSON.parse(fs.readFileSync('./config.json'));
+var Check = new CronJob(CRON_EXPR, async function () {
+    const tempData = JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH));
 
     tempData.channels.map(async function (chan, i) {
         if (!chan.ChannelName) return;
 
         try {
-            let StreamData = await Stream.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken);
+            const twitchClientId = process.env.TWITCH_CLIENT_ID;
+            if (!twitchClientId || !TWITCH_AUTH_TOKEN) return;
+            let StreamData = await Stream.getData(chan.ChannelName, twitchClientId, TWITCH_AUTH_TOKEN);
             if (StreamData.data.length == 0) return;
 
             StreamData = StreamData.data[0];
-            const ChannelData = await Channel.getData(chan.ChannelName, tempData.twitch_clientID, tempData.authToken);
+            const ChannelData = await Channel.getData(chan.ChannelName, twitchClientId, TWITCH_AUTH_TOKEN);
             if (!ChannelData) return;
 
-            var message = `Hey @everyone, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login} Go check it out!`;
+            const mentionTarget = ROLE_ID ? `<@&${ROLE_ID}>` : '@everyone';
+            var message = `Hey ${mentionTarget}, ${StreamData.user_name} is now live on https://www.twitch.tv/${StreamData.user_login} Go check it out!`;
             var owner = false;
             if (StreamData.user_login === 'rebepoi') {
                 owner = true;
@@ -133,25 +185,46 @@ var Check = new CronJob(config.cron, async function () {
                 }
             };
 
-            const sendChannel = client.guilds.cache.get(config.DiscordServerId).channels.cache.get(config.channelID);
+            const guild = client.guilds.cache.get(DISCORD_GUILD_ID);
+            if (!guild) {
+                console.error('Guild not found. Ensure DISCORD_GUILD_ID is set and the bot is in the server.');
+                return;
+            }
+            const channelObj = guild.channels.cache.get(DISCORD_CHANNEL_ID);
+            if (!channelObj || !channelObj.isTextBased?.()) {
+                console.error('Channel not found or not text-based. Ensure DISCORD_CHANNEL_ID is correct.');
+                return;
+            }
+            const sendChannel = channelObj;
 
             if (chan.twitch_stream_id == StreamData.id) {
-                sendChannel.messages.fetch(chan.discord_message_id).then(msg => {
-                    msg.edit({ embeds: [SendEmbed] });
-                });
+                const channelObj = tempData.channels[i];
+                const currentEdits = Number(channelObj.edit_count || 0);
+                if (currentEdits >= MAX_EDITS_PER_STREAM) {
+                    // Stop refreshing to preserve the last good preview after stream ends
+                } else {
+                    await sendChannel.messages.fetch(chan.discord_message_id).then(msg => {
+                        msg.edit({ embeds: [SendEmbed] });
+                    }).catch(console.error);
+                    channelObj.edit_count = currentEdits + 1;
+                }
             } else {
                 await sendChannel.send({ content: message, embeds: [SendEmbed] }).then(msg => {
                     const channelObj = tempData.channels[i];
                     channelObj.discord_message_id = msg.id;
                     channelObj.twitch_stream_id = StreamData.id;
+                    channelObj.edit_count = 0; // reset for a new stream
                 });
             }
-            fs.writeFileSync('./config.json', JSON.stringify(tempData));
+            fs.writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(tempData));
         } catch (error) {
             console.error('Error fetching stream data:', error);
         }
     });
 });
+
+// In-memory Twitch OAuth token
+let TWITCH_AUTH_TOKEN = '';
 
 // Update the authorization key every hour
 var updateAuth = new CronJob('0 * * * *', async function () {
@@ -161,24 +234,20 @@ var updateAuth = new CronJob('0 * * * *', async function () {
 
 // Get a new authorization key and update the config
 async function UpdateAuthConfig(){
-    let tempData = JSON.parse(fs.readFileSync('./config.json'));
+    const clientId = process.env.TWITCH_CLIENT_ID;
+    const clientSecret = process.env.TWITCH_SECRET;
 
-    const authKey = await Auth.getKey(tempData.twitch_clientID, tempData.twitch_secret);
+    const authKey = await Auth.getKey(clientId, clientSecret);
     if (!authKey) return;
-
-    var tempConfig = JSON.parse(fs.readFileSync('./config.json'));
-    tempConfig.authToken = authKey;
-    fs.writeFileSync('./config.json', JSON.stringify(tempConfig));
+    TWITCH_AUTH_TOKEN = authKey;
 }
 
 // Start the timers
 updateAuth.start();
 Check.start();
 
-// Dispose the AI model on disconnect
-client.on('disconnect', () => {
-    if (aiModel) aiModel.dispose();
-});
+// no-op on disconnect for OpenRouter
+client.on('disconnect', () => {});
 
 // Login
-client.login(config.token);
+client.login(DISCORD_TOKEN);

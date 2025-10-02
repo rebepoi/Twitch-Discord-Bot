@@ -1,0 +1,10 @@
+{
+    "channels": [
+        {
+            "ChannelName": "STREAMER_NAME(REQUIRED)",
+            "DiscordServer": "DISCORD_SERVER_INVITE_URL(NOT REQUIRED)",
+            "twitch_stream_id": "",
+            "discord_message_id": ""
+        }
+    ]
+}

@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  bot:
+    image: twitch-discord-bot:local
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./config.local.json:/usr/src/app/config.local.json
+    restart: unless-stopped
