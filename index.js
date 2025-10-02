@@ -102,7 +102,10 @@ client.on('messageCreate', async message => {
         for (const att of imageAttachments) {
             userContentParts.push({ type: 'image_url', image_url: { url: att.url } });
         }
-        const modelToUse = hasImages ? OPENROUTER_VISION_MODEL : OPENROUTER_MODEL;
+        // Choose model: if images present and a distinct vision model is configured, use it; otherwise use regular model
+        const modelToUse = (hasImages && OPENROUTER_VISION_MODEL && OPENROUTER_VISION_MODEL !== OPENROUTER_MODEL)
+            ? OPENROUTER_VISION_MODEL
+            : OPENROUTER_MODEL;
         const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
