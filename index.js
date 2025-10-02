@@ -111,11 +111,28 @@ client.on('messageCreate', async message => {
         }
         const json = await res.json();
         const responseText = json.choices?.[0]?.message?.content || '';
-        if (responseText && responseText.trim().length > 0) {
-            feedbackMessage.edit(responseText).catch(console.error);
-        } else {
+        if (!responseText || responseText.trim().length === 0) {
             feedbackMessage.edit("The AI did not return a valid response. Please try again.").catch(console.error);
+            return;
         }
+
+        // Discord content length guard with file fallback
+        const MAX_DISCORD_CONTENT = 3800; // keep margin under 4000
+        if (responseText.length > MAX_DISCORD_CONTENT) {
+            await feedbackMessage.edit("Response is long; uploading as file...").catch(console.error);
+            const buffer = Buffer.from(responseText, 'utf8');
+            await message.channel.send({ files: [{ attachment: buffer, name: 'ai-response.txt' }] });
+            return;
+        }
+
+        await feedbackMessage.edit(responseText).catch(async (e) => {
+            // Fallback if edit still fails due to content constraints
+            try {
+                await feedbackMessage.edit("Response could not be sent inline; uploading as file...");
+            } catch {}
+            const buffer = Buffer.from(responseText, 'utf8');
+            await message.channel.send({ files: [{ attachment: buffer, name: 'ai-response.txt' }] });
+        });
     } catch (error) {
         console.error('Error in AI completion:', error);
         if (error.code === 'REGION_BLOCK') {
