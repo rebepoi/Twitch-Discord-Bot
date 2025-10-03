@@ -165,12 +165,12 @@ client.on('messageCreate', async message => {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
 
-        const userContentParts = [];
+        const userContentPartsUrl = [];
         if (input) {
-            userContentParts.push({ type: 'text', text: input });
+            userContentPartsUrl.push({ type: 'text', text: input });
         }
         for (const att of imageAttachments) {
-            userContentParts.push({ type: 'image_url', image_url: { url: att.url } });
+            userContentPartsUrl.push({ type: 'image_url', image_url: { url: att.url } });
         }
         // Resolve models dynamically: env overrides > config.local.json > defaults
         const cfg = readConfig();
@@ -191,11 +191,72 @@ client.on('messageCreate', async message => {
                 model: modelToUse,
                 messages: [
                     { role: 'system', content: 'You are a helpful assistant inside a Discord bot.' },
-                    hasImages ? { role: 'user', content: userContentParts } : { role: 'user', content: input }
+                    hasImages ? { role: 'user', content: userContentPartsUrl } : { role: 'user', content: input }
                 ]
             })
         });
         if (!res.ok) {
+            // If provider failed to fetch image URLs, retry with base64 data URLs
+            if (res.status === 400) {
+                const text = await res.text();
+                if (/Failed to extract \d+ image\(s\)/i.test(text) && hasImages) {
+                    // Build base64 content parts
+                    const userContentPartsB64 = [];
+                    if (input) userContentPartsB64.push({ type: 'text', text: input });
+                    for (const att of imageAttachments) {
+                        try {
+                            const controller = new AbortController();
+                            const timeout = setTimeout(() => controller.abort(), 10000);
+                            const imgRes = await fetch(att.url, { signal: controller.signal });
+                            clearTimeout(timeout);
+                            if (!imgRes.ok) throw new Error('failed to fetch image');
+                            const ctHeader = att.contentType || imgRes.headers.get('content-type') || 'image/jpeg';
+                            const ab = await imgRes.arrayBuffer();
+                            const b64 = Buffer.from(ab).toString('base64');
+                            const dataUrl = `data:${ctHeader};base64,${b64}`;
+                            userContentPartsB64.push({ type: 'image_url', image_url: { url: dataUrl } });
+                        } catch (e) {
+                            console.error('Image fetch/base64 failed:', e);
+                        }
+                    }
+                    const retryRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: modelToUse,
+                            messages: [
+                                { role: 'system', content: 'You are a helpful assistant inside a Discord bot.' },
+                                { role: 'user', content: userContentPartsB64 }
+                            ]
+                        })
+                    });
+                    if (retryRes.ok) {
+                        const json = await retryRes.json();
+                        const responseText = json.choices?.[0]?.message?.content || '';
+                        if (!responseText || responseText.trim().length === 0) {
+                            await feedbackMessage.edit("The AI did not return a valid response. Please try again.").catch(console.error);
+                            return;
+                        }
+                        const MAX_DISCORD_CONTENT = 3800;
+                        if (responseText.length > MAX_DISCORD_CONTENT) {
+                            await feedbackMessage.edit("Response is long; uploading as file...").catch(console.error);
+                            const buffer = Buffer.from(responseText, 'utf8');
+                            await message.channel.send({ files: [{ attachment: buffer, name: 'ai-response.txt' }] });
+                            return;
+                        }
+                        await feedbackMessage.edit(responseText).catch(async () => {
+                            try { await feedbackMessage.edit("Response could not be sent inline; uploading as file..."); } catch {}
+                            const buffer = Buffer.from(responseText, 'utf8');
+                            await message.channel.send({ files: [{ attachment: buffer, name: 'ai-response.txt' }] });
+                        });
+                        return;
+                    }
+                    // if retry also fails, fall through to normal error handling
+                }
+            }
             // Handle rate-limit with reset time if provided
             if (res.status === 429) {
                 const limit = res.headers.get('x-ratelimit-limit');
