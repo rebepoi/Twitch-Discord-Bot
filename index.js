@@ -89,7 +89,13 @@ async function fetchOpenRouterModels(){
         const out = Number(p.completion ?? p.output ?? '1');
         return inp === 0 && out === 0;
     });
-    const vision = free.filter(m => /vl|vision|gemini/i.test(m.id) || /vision|image/i.test(JSON.stringify(m.capabilities||{})));
+    // broaden vision detection to include common vision-capable model families
+    const visionIdRegex = /(vl|vision|gemini|grok|gpt-4o|kimi)/i;
+    const vision = free.filter(m => {
+        const id = String(m.id || '');
+        const caps = JSON.stringify(m.capabilities || {});
+        return visionIdRegex.test(id) || /vision|image|multimodal/i.test(caps);
+    });
     const text = free.filter(m => !vision.includes(m));
     // limit to top 8
     return { text: text.slice(0,8).map(m=>m.id), vision: vision.slice(0,8).map(m=>m.id) };
