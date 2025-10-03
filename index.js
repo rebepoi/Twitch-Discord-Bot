@@ -137,21 +137,28 @@ client.on('messageCreate', async message => {
     if (input.length === 0) {
         return message.reply("Please provide some input for AI.");
     }
-    const feedbackMessage = await message.reply("Processing your request, please wait...");
+    // Collect image attachments from the Discord message (needed to compute model early)
+    const imageAttachments = Array.from(message.attachments?.values?.() || [])
+        .filter(att => {
+            const ct = att.contentType || '';
+            const name = att.name || att.url || '';
+            return (ct.startsWith('image/')) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+        })
+        .slice(0, 3);
+
+    const hasImages = imageAttachments.length > 0;
+    // Resolve models dynamically to show in the processing message
+    const cfgPreview = readConfig();
+    const regularModelPreview = cfgPreview.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL || OPENROUTER_MODEL;
+    const visionModelPreview = cfgPreview.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
+    const modelPreview = (hasImages && visionModelPreview && visionModelPreview !== regularModelPreview) ? visionModelPreview : regularModelPreview;
+
+    const feedbackMessage = await message.reply(`Processing your request with model: ${modelPreview}. Please wait...`);
     try {
         if (!OPENROUTER_API_KEY) {
             throw new Error('OPENROUTER_API_KEY is not set');
         }
-        // Collect image attachments from the Discord message
-        const imageAttachments = Array.from(message.attachments?.values?.() || [])
-            .filter(att => {
-                const ct = att.contentType || '';
-                const name = att.name || att.url || '';
-                return (ct.startsWith('image/')) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
-            })
-            .slice(0, 3);
 
-        const hasImages = imageAttachments.length > 0;
         const userContentParts = [];
         if (input) {
             userContentParts.push({ type: 'text', text: input });
