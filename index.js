@@ -111,8 +111,9 @@ client.on('messageCreate', async message => {
         }
         const models = await fetchOpenRouterModels();
         const current = readConfig();
-        const regularCurrent = process.env.OPENROUTER_MODEL || current.OPENROUTER_MODEL || OPENROUTER_MODEL;
-        const visionCurrent = process.env.OPENROUTER_VISION_MODEL || current.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
+        // Prefer selections from config over env so reaction-based picks take effect immediately
+        const regularCurrent = current.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL || OPENROUTER_MODEL;
+        const visionCurrent = current.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
         const lines = [];
         lines.push(`Current regular model: ${regularCurrent}`);
         lines.push(`Current vision model: ${visionCurrent}`);
@@ -160,8 +161,9 @@ client.on('messageCreate', async message => {
         }
         // Resolve models dynamically: env overrides > config.local.json > defaults
         const cfg = readConfig();
-        const regularModelEffective = process.env.OPENROUTER_MODEL || cfg.OPENROUTER_MODEL || OPENROUTER_MODEL;
-        const visionModelEffective = process.env.OPENROUTER_VISION_MODEL || cfg.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
+        // Prefer config over env so interactive selection wins at runtime
+        const regularModelEffective = cfg.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL || OPENROUTER_MODEL;
+        const visionModelEffective = cfg.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_VISION_MODEL || OPENROUTER_VISION_MODEL;
         // Choose model: if images present and a distinct vision model is configured, use it; otherwise use regular model
         const modelToUse = (hasImages && visionModelEffective && visionModelEffective !== regularModelEffective)
             ? visionModelEffective
